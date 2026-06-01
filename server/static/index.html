@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Decibelímetro ISO 8253-1 — UNER</title>
+<style>
+/* ── RESET & TOKENS ──────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#05090f; --panel:#0c1520; --panel2:#111d2c; --border:#1e3045;
+  --green:#00d96e; --green2:#009949; --green-bg:rgba(0,217,110,.08);
+  --red:#e03050; --red-bg:rgba(224,48,80,.08);
+  --amber:#f5a623; --blue:#3b9eff; --cyan:#2dd9f5;
+  --text:#b5cce0; --text2:#5a7a95; --text-hi:#e2f0fa;
+  --mono:'IBM Plex Mono','Courier New',monospace;
+  --sans:'Segoe UI',system-ui,sans-serif;
+  --r:6px;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;min-height:100vh}
+
+/* ── HEADER ─────────────────────────────────────────────── */
+header{
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;
+  padding:14px 24px;
+  background:var(--panel);border-bottom:1px solid var(--border);
+}
+.logo{font-family:var(--mono);font-size:13px;color:var(--text-hi);font-weight:700;letter-spacing:1px}
+.logo span{color:var(--green)}
+.hdr-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.conn-pill{
+  display:flex;align-items:center;gap:8px;
+  font-family:var(--mono);font-size:11px;
+  padding:5px 12px;border-radius:20px;
+  border:1px solid var(--border);background:var(--panel2);cursor:pointer;
+  transition:border-color .2s;
+}
+.conn-pill:hover{border-color:var(--blue)}
+.conn-dot{width:8px;height:8px;border-radius:50%;background:var(--text2)}
+.conn-dot.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
+.conn-dot.err{background:var(--red)}
+
+/* ── TABS ────────────────────────────────────────────────── */
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--panel);padding:0 24px}
+.tab{
+  font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;
+  padding:12px 20px;cursor:pointer;border-bottom:2px solid transparent;
+  color:var(--text2);transition:all .2s;user-select:none;
+}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--green);border-bottom-color:var(--green)}
+
+/* ── MAIN LAYOUT ─────────────────────────────────────────── */
+.pane{display:none;padding:24px}
+.pane.active{display:block}
+
+/* ── CONTROLS ROW ────────────────────────────────────────── */
+.ctrl-bar{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:14px 18px;
+  background:var(--panel);border:1px solid var(--border);border-radius:var(--r);
+  margin-bottom:20px;
+}
+.ctrl-bar label{font-family:var(--mono);font-size:11px;color:var(--text2)}
+input[type=number]{
+  width:60px;padding:5px 8px;
+  background:var(--panel2);border:1px solid var(--border);border-radius:3px;
+  color:var(--text-hi);font-family:var(--mono);font-size:13px;
+}
+
+/* ── VERDICT BANNER ──────────────────────────────────────── */
+#verdict{
+  text-align:center;font-family:var(--mono);font-weight:700;font-size:20px;
+  padding:14px;border-radius:var(--r);margin-bottom:20px;
+  border:2px solid var(--border);letter-spacing:2px;
+  transition:all .4s;
+}
+#verdict.apta  {background:var(--green-bg);border-color:var(--green2);color:var(--green)}
+#verdict.noApta{background:var(--red-bg);  border-color:#882030;       color:var(--red)}
+#verdict.idle  {color:var(--text2);background:var(--panel)}
+
+/* ── BAND BARS ───────────────────────────────────────────── */
+.bands-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:12px}
+.band-card{
+  background:var(--panel);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px 12px;text-align:center;
+}
+.band-fc{font-family:var(--mono);font-size:11px;color:var(--text2);margin-bottom:6px;letter-spacing:1px}
+.band-val{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--text-hi);margin-bottom:8px}
+.band-val.ok  {color:var(--green);text-shadow:0 0 12px rgba(0,217,110,.3)}
+.band-val.fail{color:var(--red);  text-shadow:0 0 12px rgba(224,48,80,.3)}
+.bar-wrap{height:6px;background:var(--panel2);border-radius:3px;overflow:hidden;position:relative}
+.bar-fill{height:100%;border-radius:3px;transition:width .35s ease,background .35s}
+.limit-marker{
+  position:absolute;top:0;bottom:0;width:2px;background:rgba(255,255,255,.25);
+}
+.band-limit{font-size:10px;color:var(--text2);margin-top:4px;font-family:var(--mono)}
+
+/* ── HISTORY CHART ───────────────────────────────────────── */
+#history-canvas{
+  width:100%;height:200px;display:block;
+  background:#030a10;border:1px solid var(--border);border-radius:var(--r);
+}
+
+/* ── FORM ────────────────────────────────────────────────── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+@media(max-width:600px){.form-grid{grid-template-columns:1fr}}
+.form-group{display:flex;flex-direction:column;gap:5px}
+.form-group label{font-size:11px;font-family:var(--mono);color:var(--text2);letter-spacing:1px}
+.form-group input,.form-group textarea{
+  padding:8px 12px;
+  background:var(--panel2);border:1px solid var(--border);border-radius:3px;
+  color:var(--text-hi);font-family:var(--sans);font-size:14px;
+  transition:border-color .2s;
+}
+.form-group input:focus,.form-group textarea:focus{
+  outline:none;border-color:var(--blue);
+}
+.form-group textarea{resize:vertical;min-height:70px}
+.form-full{grid-column:1/-1}
+
+/* ── SESSIONS LIST ───────────────────────────────────────── */
+.session-list{border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.session-row{
+  display:flex;align-items:center;gap:12px;padding:10px 16px;
+  border-bottom:1px solid var(--border);font-size:13px;flex-wrap:wrap;
+}
+.session-row:last-child{border-bottom:none}
+.session-row:hover{background:var(--panel2)}
+.sess-id{font-family:var(--mono);font-size:11px;color:var(--text2);width:36px;flex-shrink:0}
+.sess-date{font-size:12px;color:var(--text2);flex-shrink:0}
+.sess-inst{flex:1;min-width:120px}
+.sess-verdict{
+  font-family:var(--mono);font-size:11px;font-weight:700;
+  padding:2px 8px;border-radius:3px;flex-shrink:0;
+}
+.sess-verdict.APTA{color:var(--green);background:var(--green-bg);border:1px solid var(--green2)}
+.sess-verdict.NO_APTA{color:var(--red);background:var(--red-bg);border:1px solid #882030}
+.sess-verdict.PENDIENTE{color:var(--amber);background:rgba(245,166,35,.08);border:1px solid #7a5010}
+
+/* ── BUTTONS ─────────────────────────────────────────────── */
+.btn{
+  font-family:var(--mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;
+  padding:9px 18px;border-radius:3px;border:1px solid;cursor:pointer;
+  background:transparent;transition:all .2s;white-space:nowrap;
+}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-green{color:var(--green);border-color:var(--green2)}
+.btn-green:not(:disabled):hover{background:var(--green);color:#000;box-shadow:0 0 16px rgba(0,217,110,.35)}
+.btn-red  {color:var(--red);  border-color:#882030}
+.btn-red:not(:disabled):hover{background:var(--red);color:#fff}
+.btn-blue {color:var(--blue); border-color:#1a5a99}
+.btn-blue:not(:disabled):hover{background:var(--blue);color:#fff}
+.btn-amber{color:var(--amber);border-color:#7a5010}
+.btn-amber:not(:disabled):hover{background:var(--amber);color:#000}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
+
+/* ── STATUS LOG ──────────────────────────────────────────── */
+#log{
+  font-family:var(--mono);font-size:12px;line-height:1.7;
+  background:#020a06;border:1px solid var(--border);border-radius:var(--r);
+  padding:12px;height:140px;overflow-y:auto;margin-top:16px;
+}
+#log .info{color:var(--green)}
+#log .warn{color:var(--amber)}
+#log .err {color:var(--red)}
+
+/* ── MODAL para conexión ─────────────────────────────────── */
+.modal-overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);
+  align-items:center;justify-content:center;z-index:1000;
+}
+.modal-overlay.show{display:flex}
+.modal{
+  background:var(--panel);border:1px solid var(--border);border-radius:var(--r);
+  padding:28px;min-width:320px;max-width:90vw;
+}
+.modal h3{font-family:var(--mono);color:var(--text-hi);margin-bottom:16px;font-size:14px;letter-spacing:1px}
+.modal select{
+  width:100%;padding:8px 12px;margin-bottom:12px;
+  background:var(--panel2);border:1px solid var(--border);
+  color:var(--text-hi);font-family:var(--mono);font-size:13px;border-radius:3px;
+}
+
+/* ── MISC ────────────────────────────────────────────────── */
+.sep{border:none;border-top:1px solid var(--border);margin:20px 0}
+.badge{
+  display:inline-block;padding:2px 8px;border-radius:3px;
+  font-family:var(--mono);font-size:11px;border:1px solid;
+}
+.section-title{font-family:var(--mono);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text2);margin-bottom:12px}
+</style>
+</head>
+<body>
+
+<!-- ══ HEADER ══════════════════════════════════════════════ -->
+<header>
+  <div class="logo">Decibelímetro <span>ISO 8253-1</span> · UNER 2026</div>
+  <div class="hdr-right">
+    <div class="conn-pill" onclick="showConnModal()">
+      <div class="conn-dot" id="conn-dot"></div>
+      <span id="conn-label">Sin conexión</span>
+    </div>
+    <span class="badge" id="session-badge" style="color:var(--text2);border-color:var(--border)">Sin sesión</span>
+  </div>
+</header>
+
+<!-- ══ TABS ════════════════════════════════════════════════ -->
+<div class="tabs">
+  <div class="tab active" onclick="showTab('medicion')">① Medición</div>
+  <div class="tab" onclick="showTab('datos')">② Datos del ensayo</div>
+  <div class="tab" onclick="showTab('historial')">③ Historial</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PANE 1 — MEDICIÓN EN TIEMPO REAL
+══════════════════════════════════════════════════════════ -->
+<div class="pane active" id="pane-medicion">
+
+  <div class="ctrl-bar">
+    <label>Prom. (s):</label>
+    <input type="number" id="avg-time" value="30" min="5" max="120" style="width:60px">
+    <div class="btn-row" style="margin:0">
+      <button class="btn btn-amber" onclick="sendCal()" id="btn-cal">Calibrar (94 dB)</button>
+      <button class="btn btn-green" onclick="startMeas()" id="btn-start">▶ Iniciar</button>
+      <button class="btn btn-red"   onclick="stopMeas()"  id="btn-stop" disabled>■ Detener</button>
+      <button class="btn btn-blue"  onclick="newSession()">+ Nueva sesión</button>
+    </div>
+  </div>
+
+  <div id="verdict" class="idle">— EN ESPERA —</div>
+
+  <div class="bands-grid" id="bands-grid"></div>
+
+  <hr class="sep">
+  <div class="section-title">Historial 60 s</div>
+  <canvas id="history-canvas" height="200"></canvas>
+
+  <div id="log"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PANE 2 — FORMULARIO DATOS DEL ENSAYO
+══════════════════════════════════════════════════════════ -->
+<div class="pane" id="pane-datos">
+  <div class="section-title">Datos del lugar y el personal — se incluirán en el informe PDF</div>
+  <form id="form-ensayo" onsubmit="return false">
+    <div class="form-grid">
+      <div class="form-group form-full">
+        <label>Institución / Centro audiológico</label>
+        <input type="text" name="institucion" placeholder="Hospital, clínica, consultorio...">
+      </div>
+      <div class="form-group form-full">
+        <label>Dirección completa</label>
+        <input type="text" name="direccion" placeholder="Calle, número, ciudad, provincia">
+      </div>
+      <div class="form-group">
+        <label>Sala / Consultorio</label>
+        <input type="text" name="sala" placeholder="Cabina audiométrica N° 1">
+      </div>
+      <div class="form-group">
+        <label>N° de serie del equipo</label>
+        <input type="text" name="equipo_sn" placeholder="SN del ESP32/INMP441">
+      </div>
+      <div class="form-group">
+        <label>Fonoaudiólogo/a responsable</label>
+        <input type="text" name="fonoaudiologo" placeholder="Apellido, Nombre">
+      </div>
+      <div class="form-group">
+        <label>Matrícula Fonoaudiología (Prov./Nac.)</label>
+        <input type="text" name="mat_fono" placeholder="Mat. Prov. 1234 / Nac. 5678">
+      </div>
+      <div class="form-group">
+        <label>Bioingeniero/a responsable</label>
+        <input type="text" name="bioingeniero" placeholder="Apellido, Nombre">
+      </div>
+      <div class="form-group">
+        <label>Matrícula Bioingeniería (Prov./Nac.)</label>
+        <input type="text" name="mat_bio" placeholder="Mat. Prov. XXXX / Nac. YYYY">
+      </div>
+      <div class="form-group">
+        <label>Pistonófono — S/N / Certificado</label>
+        <input type="text" name="pistonofono" placeholder="SN 12345 — Cert. INTI 2025">
+      </div>
+      <div class="form-group">
+        <label>Temperatura (°C)</label>
+        <input type="number" name="temperatura" placeholder="22" step="0.5">
+      </div>
+      <div class="form-group">
+        <label>Humedad relativa (%)</label>
+        <input type="number" name="humedad" placeholder="55" min="0" max="100">
+      </div>
+      <div class="form-group form-full">
+        <label>Observaciones</label>
+        <textarea name="observaciones" placeholder="Condiciones especiales, anomalías detectadas..."></textarea>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button type="button" class="btn btn-blue"  onclick="saveSessionData()">💾 Guardar datos</button>
+      <button type="button" class="btn btn-green" onclick="generatePDF()" id="btn-pdf">📄 Generar PDF</button>
+    </div>
+  </form>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PANE 3 — HISTORIAL DE SESIONES
+══════════════════════════════════════════════════════════ -->
+<div class="pane" id="pane-historial">
+  <div class="section-title">Sesiones anteriores</div>
+  <div class="btn-row" style="margin-bottom:16px">
+    <button class="btn btn-blue" onclick="loadSessions()">↻ Actualizar</button>
+  </div>
+  <div class="session-list" id="session-list">
+    <div class="session-row" style="color:var(--text2);font-size:13px">Cargando...</div>
+  </div>
+</div>
+
+<!-- ══ MODAL CONEXIÓN ══════════════════════════════════════ -->
+<div class="modal-overlay" id="conn-modal">
+  <div class="modal">
+    <h3>Conexión al ESP32</h3>
+    <label style="font-size:12px;color:var(--text2);font-family:var(--mono)">Puerto serie</label>
+    <select id="port-select"><option value="">Detectando...</option></select>
+    <label style="font-size:12px;color:var(--text2);font-family:var(--mono)">Baudrate</label>
+    <select id="baud-select">
+      <option value="921600" selected>921600</option>
+      <option value="115200">115200</option>
+    </select>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn btn-green" onclick="connectPort()">Conectar</button>
+      <button class="btn btn-red"   onclick="hideConnModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   WEBSOCKET
+════════════════════════════════════════════════════════════ */
+let ws = null;
+let activeSession = null;
+let isConnected = false;
+let isMeasuring = false;
+
+const ISO_LIMITS = {125:35,250:25,500:21,1000:26,2000:34,4000:37,8000:43};
+const BANDS = [125,250,500,1000,2000,4000,8000];
+
+// Historia para el gráfico (últimos 60 puntos ≈ 12 s)
+const HIST_LEN = 60;
+const history  = {};
+BANDS.forEach(fc => history[fc] = new Array(HIST_LEN).fill(null));
+
+function connectWS() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen  = () => { log('WebSocket conectado al servidor Python', 'info'); refreshPorts(); };
+  ws.onclose = () => { log('WebSocket desconectado — reconectando...', 'warn'); setTimeout(connectWS, 3000); };
+  ws.onerror = () => log('Error WebSocket', 'err');
+  ws.onmessage = e => { try { handleMsg(JSON.parse(e.data)); } catch(_){} };
+}
+
+function send(obj) {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+/* ════════════════════════════════════════════════════════════
+   MANEJADOR DE MENSAJES DEL SERVIDOR
+════════════════════════════════════════════════════════════ */
+function handleMsg(msg) {
+  switch(msg.t) {
+    case 'meas':       onMeasurement(msg);  break;
+    case 'status':     onStatus(msg);       break;
+    case 'cal_done':   onCalDone(msg);      break;
+    case 'err':        log(`Error ESP32: ${msg.code} — ${msg.msg}`, 'err'); break;
+    case 'port_status':onPortStatus(msg);   break;
+    case 'ports':      fillPortSelect(msg.list); break;
+    case 'session':    onSession(msg);      break;
+    case 'sessions':   renderSessions(msg.list); break;
+    case 'session_saved': log('Datos de sesión guardados', 'info'); break;
+    case 'finalized':  log('Sesión finalizada', 'info'); break;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   MEDICIÓN EN TIEMPO REAL
+════════════════════════════════════════════════════════════ */
+function onMeasurement(msg) {
+  const spl  = msg.spl || {};
+  const apta = msg.apta;
+
+  // Veredicto
+  const v = document.getElementById('verdict');
+  v.textContent = apta ? '✔  CABINA APTA' : '✘  RUIDO EXCESIVO';
+  v.className   = apta ? 'apta' : 'noApta';
+
+  // Barras por banda
+  BANDS.forEach(fc => {
+    const val   = spl[fc] ?? spl[String(fc)];
+    if (val === undefined) return;
+    const limite= ISO_LIMITS[fc];
+    const ok    = val <= limite;
+    const pct   = Math.min(val / limite * 100, 130);
+
+    const cardVal  = document.getElementById(`bv-${fc}`);
+    const barFill  = document.getElementById(`bf-${fc}`);
+    if (cardVal) {
+      cardVal.textContent = val.toFixed(1) + ' dB';
+      cardVal.className   = 'band-val ' + (ok ? 'ok' : 'fail');
+    }
+    if (barFill) {
+      barFill.style.width      = pct + '%';
+      barFill.style.background = ok
+        ? `linear-gradient(90deg, #009949, #00d96e)`
+        : `linear-gradient(90deg, #882030, #e03050)`;
+    }
+    // Historia
+    history[fc].push(val);
+    history[fc].shift();
+  });
+
+  drawHistory();
+}
+
+function onStatus(msg) {
+  const s = msg.state;
+  log(`Estado ESP32: ${s} | cal_ok: ${msg.cal_ok} | factor: ${(msg.cal_factor||1).toFixed(4)}`, 'info');
+  if (s === 'measuring' && !isMeasuring) setMeasuring(true);
+  if (s === 'idle' && isMeasuring)       setMeasuring(false);
+}
+
+function onCalDone(msg) {
+  log(`✔ Calibración OK — medido: ${msg.measured?.toFixed(1)} dB | ref: ${msg.ref} dB | factor: ${msg.factor?.toFixed(5)}`, 'info');
+}
+
+function setMeasuring(v) {
+  isMeasuring = v;
+  document.getElementById('btn-start').disabled = v;
+  document.getElementById('btn-stop').disabled  = !v;
+}
+
+/* ════════════════════════════════════════════════════════════
+   CONTROLES
+════════════════════════════════════════════════════════════ */
+function startMeas() {
+  const avgS = parseInt(document.getElementById('avg-time').value) || 30;
+  if (!activeSession) newSession();
+  send({action:'start', avg_s: avgS});
+  setMeasuring(true);
+  log(`Medición iniciada — promedio ${avgS}s`, 'info');
+}
+
+function stopMeas() {
+  send({action:'stop'});
+  setMeasuring(false);
+  log('Medición detenida', 'warn');
+  // Finalizar sesión con el veredicto actual
+  const apta = document.getElementById('verdict').classList.contains('apta');
+  if (activeSession) {
+    send({action:'finalize', apta});
+    log(`Sesión ${activeSession} finalizada: ${apta?'APTA':'NO APTA'}`, 'info');
+  }
+}
+
+function sendCal() {
+  send({action:'calibrate', ref_db: 94.0});
+  log('Calibración iniciada (pistonófono 94 dB @ 1kHz)...', 'warn');
+}
+
+function newSession() {
+  send({action:'new_session'});
+}
+
+function onSession(msg) {
+  activeSession = msg.id;
+  document.getElementById('session-badge').textContent = `Sesión #${msg.id}`;
+  document.getElementById('session-badge').style.color = 'var(--blue)';
+  document.getElementById('session-badge').style.borderColor = '#1a5a99';
+  log(`Nueva sesión creada: #${msg.id}`, 'info');
+}
+
+/* ════════════════════════════════════════════════════════════
+   FORMULARIO Y PDF
+════════════════════════════════════════════════════════════ */
+function saveSessionData() {
+  if (!activeSession) { alert('Iniciá una sesión primero (pestaña Medición → + Nueva sesión)'); return; }
+  const data = Object.fromEntries(new FormData(document.getElementById('form-ensayo')));
+  send({action:'update_session', data});
+}
+
+async function generatePDF() {
+  if (!activeSession) { alert('No hay sesión activa para generar el informe.'); return; }
+  saveSessionData();
+  await new Promise(r => setTimeout(r, 400));  // dar tiempo a guardar
+  const resp = await fetch(`/api/report/${activeSession}`);
+  if (!resp.ok) { alert('Error generando el PDF. Verificar que haya mediciones en la sesión.'); return; }
+  const blob = await resp.blob();
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `informe_ISO8253_${activeSession}.pdf`;
+  a.click();
+  log('PDF generado y descargado', 'info');
+}
+
+/* ════════════════════════════════════════════════════════════
+   HISTORIAL DE SESIONES
+════════════════════════════════════════════════════════════ */
+function loadSessions() { send({action:'list_sessions'}); }
+
+function renderSessions(list) {
+  const el = document.getElementById('session-list');
+  if (!list || list.length === 0) {
+    el.innerHTML = '<div class="session-row" style="color:var(--text2)">Sin sesiones registradas</div>';
+    return;
+  }
+  el.innerHTML = list.map(s => `
+    <div class="session-row">
+      <span class="sess-id">#${s.id}</span>
+      <span class="sess-date">${(s.started_at||'').slice(0,16)}</span>
+      <span class="sess-inst">${s.institucion||'Sin institución'} — ${s.sala||''}</span>
+      <span class="sess-verdict ${s.veredicto||'PENDIENTE'}">${s.veredicto||'PENDIENTE'}</span>
+      <button class="btn btn-blue" style="padding:4px 10px;font-size:10px"
+        onclick="downloadReport(${s.id})">PDF</button>
+    </div>`).join('');
+}
+
+async function downloadReport(sid) {
+  const resp = await fetch(`/api/report/${sid}`);
+  if (!resp.ok) { alert('Sin datos suficientes para generar el informe.'); return; }
+  const blob = await resp.blob();
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `informe_ISO8253_${sid}.pdf`;
+  a.click();
+}
+
+/* ════════════════════════════════════════════════════════════
+   CONEXIÓN RS-232
+════════════════════════════════════════════════════════════ */
+function showConnModal() { document.getElementById('conn-modal').classList.add('show'); refreshPorts(); }
+function hideConnModal() { document.getElementById('conn-modal').classList.remove('show'); }
+
+function refreshPorts() {
+  send({action:'list_ports'});
+}
+
+function fillPortSelect(ports) {
+  const sel = document.getElementById('port-select');
+  sel.innerHTML = ports.length
+    ? ports.map(p => `<option value="${p}">${p}</option>`).join('')
+    : '<option value="">No se encontraron puertos</option>';
+}
+
+function connectPort() {
+  const port = document.getElementById('port-select').value;
+  const baud = parseInt(document.getElementById('baud-select').value);
+  if (!port) { alert('Seleccioná un puerto'); return; }
+  send({action:'connect_port', port, baud});
+  hideConnModal();
+}
+
+function onPortStatus(msg) {
+  isConnected = msg.ok;
+  document.getElementById('conn-dot').className   = 'conn-dot ' + (msg.ok ? 'ok' : 'err');
+  document.getElementById('conn-label').textContent = msg.ok ? msg.port : 'Sin conexión';
+  log(msg.ok ? `Conectado a ${msg.port}` : `Error conectando a ${msg.port}`, msg.ok ? 'info' : 'err');
+}
+
+/* ════════════════════════════════════════════════════════════
+   CANVAS GRÁFICO HISTORIA
+════════════════════════════════════════════════════════════ */
+const COLORS = {
+  125:'#e03050', 250:'#f5a623', 500:'#f5f523',
+  1000:'#00d96e', 2000:'#2dd9f5', 4000:'#3b9eff', 8000:'#c084fc'
+};
+
+function drawHistory() {
+  const canvas = document.getElementById('history-canvas');
+  const dpr    = Math.min(window.devicePixelRatio||1, 2);
+  const w      = canvas.parentElement.getBoundingClientRect().width;
+  const h      = 200;
+  if (canvas.width !== Math.round(w*dpr)) {
+    canvas.width  = Math.round(w*dpr);
+    canvas.height = h*dpr;
+    canvas.style.height = h+'px';
+  }
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.save(); ctx.scale(dpr,dpr);
+
+  // Grid
+  ctx.strokeStyle='rgba(30,48,70,.5)'; ctx.lineWidth=1;
+  [0,20,40,60,80].forEach(db => {
+    const y = h - (db/90)*h;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+    ctx.fillStyle='#3a5a70'; ctx.font='9px IBM Plex Mono,monospace';
+    ctx.fillText(db+'dB', 2, y-2);
+  });
+
+  // Señales
+  BANDS.forEach(fc => {
+    const hist = history[fc];
+    const col  = COLORS[fc];
+    ctx.strokeStyle = col; ctx.lineWidth = 1.8;
+    ctx.shadowColor = col; ctx.shadowBlur = 4;
+    ctx.beginPath();
+    let started = false;
+    hist.forEach((v, i) => {
+      if (v === null) return;
+      const x = i/(HIST_LEN-1)*w;
+      const y = h - Math.min(v/90,1)*h;
+      started ? ctx.lineTo(x,y) : (ctx.moveTo(x,y), started=true);
+    });
+    ctx.stroke(); ctx.shadowBlur=0;
+  });
+
+  // Leyenda
+  BANDS.forEach((fc, i) => {
+    const x = 32 + i*56;
+    ctx.fillStyle = COLORS[fc];
+    ctx.fillRect(x, h-16, 14, 4);
+    ctx.font = '9px IBM Plex Mono,monospace';
+    ctx.fillStyle = '#6a8aa8';
+    ctx.fillText(fc, x+16, h-12);
+  });
+
+  ctx.restore();
+}
+
+/* ════════════════════════════════════════════════════════════
+   INICIALIZACIÓN DE BANDAS
+════════════════════════════════════════════════════════════ */
+function initBands() {
+  const grid = document.getElementById('bands-grid');
+  grid.innerHTML = BANDS.map(fc => `
+    <div class="band-card">
+      <div class="band-fc">${fc} Hz</div>
+      <div class="band-val" id="bv-${fc}">—</div>
+      <div class="bar-wrap">
+        <div class="bar-fill" id="bf-${fc}" style="width:0%"></div>
+        <div class="limit-marker" style="left:76.9%"></div>
+      </div>
+      <div class="band-limit">Lím: ${ISO_LIMITS[fc]} dB</div>
+    </div>`).join('');
+}
+
+/* ════════════════════════════════════════════════════════════
+   TABS
+════════════════════════════════════════════════════════════ */
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['medicion','datos','historial'][i]===name));
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.id==='pane-'+name));
+  if (name==='historial') loadSessions();
+}
+
+/* ════════════════════════════════════════════════════════════
+   LOG
+════════════════════════════════════════════════════════════ */
+function log(msg, cls='info') {
+  const el  = document.getElementById('log');
+  const ts  = new Date().toTimeString().slice(0,8);
+  const div = document.createElement('div');
+  div.className = cls;
+  div.textContent = `[${ts}] ${msg}`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+  if (el.children.length > 200) el.removeChild(el.firstChild);
+}
+
+/* ════════════════════════════════════════════════════════════
+   INIT
+════════════════════════════════════════════════════════════ */
+window.addEventListener('load', () => {
+  initBands();
+  connectWS();
+  drawHistory();
+  window.addEventListener('resize', drawHistory);
+});
+</script>
+</body>
+</html>
