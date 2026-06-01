@@ -1,0 +1,2 @@
+source /home/oem/Documents/DSP-ESP32-UNER/TrabajoUner_final_dsp/decibilimetro_ISO8253_UNER/decibilimetro_firmware/decibel/build/bootloader/gdbinit/symbols
+source /home/oem/Documents/DSP-ESP32-UNER/TrabajoUner_final_dsp/decibilimetro_ISO8253_UNER/decibilimetro_firmware/decibel/build/bootloader/gdbinit/connect

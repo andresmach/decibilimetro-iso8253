@@ -1,6 +1,4 @@
-firmware/build/
-firmware/.vscode/
-firmware/sdkconfig
-server/__pycache__/
-server/decibilimetro.db
-*.pyc
+.env
+__pycache__
+.venv
+.DS_Store
